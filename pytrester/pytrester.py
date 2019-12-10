@@ -1,9 +1,11 @@
 from __future__ import print_function
 import sys
 import pickle
+import re
 import os
 import os.path
 import subprocess
+import fileinput
 from datetime import datetime
 from tqdm import tqdm
 from coverage import Coverage
@@ -17,6 +19,18 @@ SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 
 # The ID and range of a sample spreadsheet.
 SAMPLE_SPREADSHEET_ID = os.environ.get('SPREADSHEET_ID')
+
+
+PATTERNS = [
+    (r'^import StringIO$', 'from six.moves import StringIO'),
+    (r'^from StringIO import StringIO$', 'from six.moves import StringIO'),
+    (r'StringIO.StringIO\(\)', 'StringIO()'),
+    (r'^import mock', '''import six
+if six.PY2:
+    import mock
+else:
+    from unittest import mock''')
+]
 
 def setup_service_sheet():
     creds = None
@@ -91,9 +105,29 @@ def get_modules():
     return values
 
 
-def test_py3(module=None):
+def fix_patterns(module):
+    module_path = os.path.join(os.environ['OPENERP_ADDONS_PATH'], module)
+    py_files = []
+    for root, dirs, files in os.walk(module_path):
+        for f in files:
+            if f.endswith(".py"):
+                py_files.append(os.path.join(root, f))
+    for line in fileinput.input(py_files, inplace=True):
+        for pat in PATTERNS:
+            if re.findall(pat[0], line):
+                print(re.sub(pat[0], pat[1], line), end='')
+                break
+        else:
+            print(line, end='')
+
+
+
+def test_py3(module=None, only_failed=True):
     modules_values = get_modules()
-    modules = [x[0] for x in modules_values]
+    if only_failed:
+        modules = [x[0] for x in modules_values if x[1] == '0']
+    else:
+        modules = [x[0] for x in modules_values]
     if module:
         if module not in modules:
             raise ValueError(
@@ -102,13 +136,10 @@ def test_py3(module=None):
         else:
             modules = [module]
     
-    else:
-        max_date = max(x[5] for x in modules_values if len(x) >= 5).split()[0]
-        max_date = '{} 00:00:00'.format(max_date)
-        modules = [x[0] for x in modules_values if len(x) <= 3 or x[5] < max_date ]
-        print('Restoring from {}... pending {} modules'.format(max_date, len(modules)))
+    print('Testing {} modules'.format(len(modules)))
     
     for module in tqdm(modules):
+        fix_patterns(module)
         result, elapsed = run_destral(module)
         py3 = int(result == 0)
         cov = Coverage()
