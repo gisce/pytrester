@@ -12,7 +12,9 @@ setup(
         'tqdm',
         'coverage',
         'google-api-python-client',
-        'destral'
+        'google-auth-oauthlib',
+        'destral',
+        'rq'
 
     ],
     author_email='devel@gisce.net',
