@@ -12,29 +12,44 @@ from . import SAMPLE_SPREADSHEET_ID, SCOPES
 
 
 def futurize(module):
-    subprocess.call([
-        'futurize',
-        '--stage1',
-        '-w',
-        '-n',
-        os.path.join(os.environ.get('OPENERP_ADDONS_PATH'), module)
-    ])
+    module_path = os.path.join(os.environ.get('OPENERP_ADDONS_PATH'), module)
+    if os.path.exists(module_path):
+        subprocess.call([
+            'futurize',
+            '--stage1',
+            '-w',
+            '-n',
+            module_path
+        ])
 
 
 def fix_patterns(module):
     module_path = os.path.join(os.environ['OPENERP_ADDONS_PATH'], module)
+    if not os.path.exists(module_path):
+        return
     py_files = []
     for root, dirs, files in os.walk(module_path):
         for f in files:
             if f.endswith(".py"):
                 py_files.append(os.path.join(root, f))
-    for line in fileinput.input(py_files, inplace=True):
-        for pat in PATTERNS:
-            if re.findall(pat[0], line):
-                print(re.sub(pat[0], pat[1], line), end='')
-                break
-        else:
-            print(line, end='')
+    #for line in fileinput.input(py_files, inplace=True):
+    #    for pat in PATTERNS:
+    #        if re.findall(pat[0], line):
+    #            print(re.sub(pat[0], pat[1], line), end='')
+    #            break
+    #    else:
+    #        print(line, end='')
+    for pyfile in py_files:
+        print('Checking for patterns in {}'.format(pyfile))
+        with open(pyfile, 'r+') as f:
+            content = f.read()
+            for pattern in PATTERNS:
+                if re.findall(pattern[0], content, re.MULTILINE):
+                    print('  => Fixing pattern {}'.format(pattern))
+                    content = re.sub(*pattern, content, flags=re.MULTILINE)
+                    f.seek(0)
+                    f.truncate()
+                    f.write(content)
 
 
 def run_destral(module):

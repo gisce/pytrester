@@ -21,7 +21,7 @@ def enqueue_modules(modules=None, only_failed=True):
         test_py3.delay(module)
 
 
-@job('py3', connection=REDIS_CONN)
+@job('py3', connection=REDIS_CONN, timeout=3600)
 def test_py3(module):
     futurize(module)
     fix_patterns(module)
